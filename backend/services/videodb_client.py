@@ -87,19 +87,26 @@ class VideoDBClient:
         }
     
     def add_text_overlay(self, video_id: str, text: str, start: float = 0, 
-                         duration: float = 5, position: str = "center") -> dict:
-        """Add text overlay to video"""
+                         duration: float = 5, position: str = "center",
+                         video_start: float = None, video_end: float = None) -> dict:
+        """Add text overlay to video while preserving any trim"""
         video = self.get_video(video_id)
         timeline = Timeline(self.conn)
         
-        # Add video track
-        video_asset = VideoAsset(asset_id=video.id)
+        # Add video track - use trim if specified, otherwise full video
+        if video_start is not None and video_end is not None:
+            video_asset = VideoAsset(asset_id=video.id, start=video_start, end=video_end)
+            actual_duration = video_end - video_start
+        else:
+            video_asset = VideoAsset(asset_id=video.id)
+            actual_duration = video.length
+            
         timeline.add_inline(video_asset)
         
         # Add text overlay
         text_asset = TextAsset(
             text=text,
-            duration=duration,
+            duration=min(duration, actual_duration),  # Don't exceed video duration
             style=TextStyle(
                 fontsize=48,
                 fontcolor="white",
@@ -112,7 +119,9 @@ class VideoDBClient:
         stream_url = timeline.generate_stream()
         return {
             "stream_url": stream_url,
-            "text": text
+            "text": text,
+            "duration": actual_duration,
+            "length": actual_duration
         }
     
     def render_video(self, timeline) -> dict:

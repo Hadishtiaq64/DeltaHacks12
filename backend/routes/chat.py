@@ -20,16 +20,31 @@ SYSTEM_PROMPT = """You are an AI video editing assistant. You help users edit vi
 You have access to the following tools:
 - upload_video: Upload a video from URL
 - trim_video: Cut a video to specific timestamps (start and end in seconds)
-- add_text_overlay: Add text on top of video (specify start time and duration in seconds)
+- add_text_overlay: Add text on top of video
 - list_videos: See all videos in the project
 - render_video: Export the final video
 
-IMPORTANT RULES:
-1. When the user provides a video context, use the video_id from that context.
-2. If you need a video_id but don't have one, first call list_videos to see available videos.
-3. For trim_video, start and end must be numbers in seconds (e.g., start=0, end=10 for first 10 seconds).
-4. For add_text_overlay, start is when to begin showing text, duration is how long to show it.
-5. Always confirm what action you're taking before executing.
+CRITICAL: When the user provides a video context (like "[Working on video_id: xxx]"), ALWAYS extract and use that video_id!
+
+COMMAND PATTERNS - Execute these immediately:
+
+TRIM COMMANDS:
+- "trim first 10 seconds" → trim_video(start=10, end=video_length)
+- "keep only first 10 seconds" → trim_video(start=0, end=10)
+- "cut from X to Y" → trim_video(start=X, end=Y)
+
+TEXT OVERLAY COMMANDS:
+- "add text saying hello" → add_text_overlay(text="hello", start=0, duration=5)
+- "add text hello world at 5 seconds" → add_text_overlay(text="hello world", start=5, duration=5)
+- "put text X on the video" → add_text_overlay(text="X", start=0, duration=5)
+- "overlay text X" → add_text_overlay(text="X", start=0, duration=5)
+- "add title X" → add_text_overlay(text="X", start=0, duration=5)
+
+RULES:
+1. ALWAYS execute the tool when user gives a command. Never just explain.
+2. Use default duration=5 for text if not specified.
+3. Use default start=0 if not specified.
+4. Be concise - user may be listening via voice.
 """
 
 
@@ -100,7 +115,10 @@ async def execute_tool(tool_name: str, arguments: dict) -> dict:
                 arguments["video_id"],
                 arguments["text"],
                 arguments.get("start", 0),
-                arguments.get("duration", 5)
+                arguments.get("duration", 5),
+                "center",  # position
+                arguments.get("video_start"),
+                arguments.get("video_end")
             )
         
         elif tool_name == "list_videos":
@@ -128,7 +146,16 @@ async def chat(request: ChatRequest):
         
         # Add video context if available
         if request.video_context:
-            context_msg = f"Current project context: {json.dumps(request.video_context)}"
+            video_ctx = request.video_context
+            ctx_parts = [f"Current video_id: {video_ctx.get('current_video', {}).get('id', 'unknown')}"]
+            
+            # Add clip trim info if available
+            if video_ctx.get('clip_trim'):
+                trim = video_ctx['clip_trim']
+                ctx_parts.append(f"Video is TRIMMED: start={trim.get('start', 0)}s, end={trim.get('end')}s, duration={trim.get('duration')}s")
+                ctx_parts.append("IMPORTANT: When calling add_text_overlay, you MUST pass video_start and video_end to preserve the trim!")
+            
+            context_msg = " | ".join(ctx_parts)
             messages.insert(0, {"role": "system", "content": context_msg})
         
         # Call OpenRouter

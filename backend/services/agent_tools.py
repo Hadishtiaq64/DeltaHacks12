@@ -55,7 +55,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "add_text_overlay",
-            "description": "Add text overlay on top of a video",
+            "description": "Add text overlay on top of a video. Use video_start and video_end to preserve any existing trim.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -74,6 +74,14 @@ AGENT_TOOLS = [
                     "duration": {
                         "type": "number",
                         "description": "How long to show the text (seconds)"
+                    },
+                    "video_start": {
+                        "type": "number",
+                        "description": "If video is trimmed, the trim start time in seconds"
+                    },
+                    "video_end": {
+                        "type": "number",
+                        "description": "If video is trimmed, the trim end time in seconds"
                     }
                 },
                 "required": ["video_id", "text"]
